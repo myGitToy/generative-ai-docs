@@ -26,6 +26,8 @@ from rich.progress import Progress
 
 from docs_agent.agents.docs_agent import DocsAgent
 from docs_agent.utilities.config import ConfigFile
+from docs_agent.storage.rag import return_collection_name
+from docs_agent.utilities.helpers import identify_file_type, open_file, open_image
 
 
 # This function is used by the `helpme` command to ask the Gemini Pro model
@@ -76,7 +78,7 @@ def ask_model(question: str, product_configs: ConfigFile, return_output: bool = 
                 docs_agent = DocsAgent(config=product)
                 progress.update(
                     task_docs_agent,
-                    description=f"[turquoise4 bold]Asking Gemini (model: {product.models.language_model}, source: {docs_agent.return_chroma_collection()}) ",
+                    description=f"[turquoise4 bold]Asking Gemini (model: {product.models.language_model}, source: {return_collection_name(product_config=product)}) ",
                     total=None,
                 )
                 if docs_agent.config.docs_agent_config == "experimental":
@@ -85,27 +87,34 @@ def ask_model(question: str, product_configs: ConfigFile, return_output: bool = 
                 else:
                     results_num = 5
                     new_question_count = 5
-                # Issue if max_sources > results_num, so leave the same for now
-                search_result, final_context = docs_agent.query_vector_store_to_build(
-                    question=question,
-                    token_limit=30000,
-                    results_num=results_num,
-                    max_sources=results_num,
-                )
-                (
-                    response,
-                    full_prompt,
-                ) = docs_agent.ask_content_model_with_context_prompt(
-                    context=final_context, question=question
-                )
-                if len(search_result) >= 1:
-                    if search_result[0].section.url == "":
-                        link = str(search_result[0].section)
-                    else:
-                        link = search_result[0].section.url
-                search_results.append(search_result)
-                responses.append(response)
-                links.append(link)
+                if not docs_agent.rag:
+                    logging.error("No initialized Chroma collection.")
+                else:
+                    try:
+                        search_result, final_context = docs_agent.rag.query_vector_store_to_build(
+                            question=question,
+                            token_limit=30000,
+                            results_num=results_num,
+                            max_sources=results_num,
+                        )
+                    except Exception as e:
+                        logging.error(f"Error retrieving content from Chroma: {e}")
+                        search_result = []
+                        final_context = "Error: Could not retrieve context."
+                    (
+                        response,
+                        full_prompt,
+                    ) = docs_agent.ask_content_model_with_context_prompt(
+                        context=final_context, question=question
+                    )
+                    if len(search_result) >= 1:
+                        if search_result[0].section.url == "":
+                            link = str(search_result[0].section)
+                        else:
+                            link = search_result[0].section.url
+                    search_results.append(search_result)
+                    responses.append(response)
+                    links.append(link)
             elif "aqa" in product.models.language_model:
                 if product.db_type == "google_semantic_retriever":
                     docs_agent = DocsAgent(config=product, init_chroma=False)
@@ -134,7 +143,7 @@ def ask_model(question: str, product_configs: ConfigFile, return_output: bool = 
                     docs_agent = DocsAgent(config=product, init_chroma=True)
                     progress.update(
                         task_docs_agent,
-                        description=f"[turquoise4 bold]Asking Gemini (model: {product.models.language_model}, source: {docs_agent.return_chroma_collection()}) ",
+                        description=f"[turquoise4 bold]Asking Gemini (model: {product.models.language_model}, source: {return_collection_name(product_config=product)}) ",
                         total=None,
                     )
                     (
@@ -274,34 +283,25 @@ def ask_model_with_file(
     full_prompt = ""
     final_context = ""
     response = ""
-
+    # Identify the file type.
+    if file:
+        file_type = identify_file_type(file)
+    else:
+        file_type = None
     # Get the content of the target file.
     file_content = ""
-    if file != None:
-        try:
-            with open(file, "r", encoding="utf-8") as auto:
-                content = auto.read()
-                auto.close()
-            file_content = f"\nTHE CONTENT BELOW IS FROM THE FILE {file}:\n\n" + content
-        except:
-            print(f"Cannot open the file {file}")
-            exit(1)
+    if file_type == "text":
+        content = open_file(file)
+        file_content = f"\nTHE CONTENT BELOW IS FROM THE FILE {file}:\n\n" + content
 
     # Get the content of the context file.
-    context_file_content = ""
-    if context_file != None:
-        try:
-            with open(context_file, "r", encoding="utf-8") as auto:
-                content = auto.read()
-                auto.close()
-            context_file_content = (
-                f"\nTHE CONTENT BELOW IS FROM THE PREVIOUS EXCHANGES WITH GEMINI:\n\n"
-                + content
-            )
-            file_content = context_file_content + "\n\n" + file_content
-        except:
-            print(f"Cannot open the context file {file}")
-            exit(1)
+    if context_file:
+        content = open_file(context_file)
+        context_file_content = (
+            f"\nTHE CONTENT BELOW IS FROM THE PREVIOUS EXCHANGES WITH GEMINI:\n\n"
+            + content
+        )
+        file_content = context_file_content + "\n\n" + file_content
 
     # Use the first product by default.
     product = product_configs.products[0]
@@ -319,7 +319,7 @@ def ask_model_with_file(
                     config=product, init_chroma=True, init_semantic=False
                 )
                 # Get the Chroma collection name.
-                collection = docs_agent.return_chroma_collection()
+                collection = return_collection_name(product_config=product)
                 # Set the progress bar.
                 label = f"[turquoise4 bold]Asking Gemini (model: {language_model}, source: {collection}) "
                 progress.update(
@@ -329,7 +329,7 @@ def ask_model_with_file(
                 (
                     search_result,
                     returned_context,
-                ) = docs_agent.query_vector_store_to_build(
+                ) = docs_agent.rag.query_vector_store_to_build(
                     question=question,
                     token_limit=500000,
                     results_num=5,
@@ -365,8 +365,8 @@ def ask_model_with_file(
                     task_docs_agent, description=label, total=None, refresh=True
                 )
                 # Retrieve context from the online corpus.
-                context_chunks = docs_agent.retrieve_chunks_from_corpus(
-                    question, corpus_name=str(corpus_name)
+                context_chunks = docs_agent.aqa_model.retrieve_chunks_from_corpus(
+                    question=question, corpus_name=str(corpus_name)
                 )
                 context_from_corpus = ""
                 chunk_count = 0
@@ -395,15 +395,19 @@ def ask_model_with_file(
                 total=None,
             )
             final_context = file_content
-        # print(f"Context:\n{final_context}")
-        # print(f"Question:\n{question}")
-        # Ask Gemini with the question and final context.
-        (
-            response,
-            full_prompt,
-        ) = docs_agent.ask_content_model_with_context_prompt(
-            context=final_context, question=question
-        )
+        if file_type != "text" and file_type:
+            this_prompt = final_context + "\nQUESTION (REQUEST): " + question
+            response = docs_agent.language_model.ask_about_file(
+                    prompt=this_prompt, file_path=file
+                )
+        else:
+            # Ask Gemini with the question and final context.
+            (
+                response,
+                full_prompt,
+            ) = docs_agent.ask_content_model_with_context_prompt(
+                context=final_context, question=question
+            )
         if return_output:
             return str(response.strip())
         ai_console.print()

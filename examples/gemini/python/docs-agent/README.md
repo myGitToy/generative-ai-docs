@@ -7,9 +7,39 @@ Docs Agent provides a set of easy-to-use self-service tools designed to give you
 your team access to Google's [Gemini API][genai-doc-site] for learning, experimentation,
 and project deployment.
 
-## Overview
+## Docs Agent MCP integration [NEW]
 
-Docs Agent apps use a technique known as Retrieval Augmented Generation (RAG), which
+With the latest MCP (Model Context Protocol) integration, you can set up and launch
+a MCP server and enable the Docs Agent CLI (`agent tools`) to use this MCP server.
+
+The following example shows Docs Agent interacting with a
+[`git` MCP server][git-mcp-server] on the host machine:
+
+```
+$ agent tools Show me the latest commit in the Docs Agent project.
+
+Using tools: ['git']
+
+Commit: 082949927e88df429c76e6dbf0a9e216c88fa5b0
+Author: Bob Alice
+Date: Tue May 13 11:22:19 2025 -0700
+Message: Update BeautifulSoup findAll to find_all.
+```
+
+To enable a MCP server, update the `config.yaml` file in your Docs Agent project,
+for example:
+
+```
+mcp_servers:
+  - server_type: "stdio"
+    command: "uv"
+    name: "git"
+    args: ["--directory","/usr/local/home/user01/mcp_servers/servers/src/git", "run", "mcp-server-git"]
+```
+
+## Docs Agent web app
+
+Docs Agent uses a technique known as **Retrieval Augmented Generation (RAG)**, which
 allows you to bring your own documents as knowledge sources to AI language models.
 This approach helps the AI language models to generate relevant and accurate responses
 that are grounded in the information that you provide and control.
@@ -18,13 +48,43 @@ that are grounded in the information that you provide and control.
 
 **Figure 1**. Docs Agent uses a vector database to retrieve context for augmenting prompts.
 
-Docs Agent apps are designed to be easily set up and configured in a Linux environment.
-If you want to set up and launch the Docs Agent chat app on your host machine, check out
-the [Set up Docs Agent][set-up-docs-agent] section below.
+The Docs Agent chatbot web app is designed to be easily set up and configured in a Linux
+environment. If you want to set up and launch the Docs Agent chat app on your host machine,
+check out the [Set up Docs Agent][set-up-docs-agent] section below.
 
-### Summary of features
+## Docs Agent tasks
 
-The following list summarizes the tasks and features supported by Docs Agent:
+Docs Agent's `agent runtask` command allows you to run pre-defined chains of prompts,
+which are referred to as **tasks**. These tasks simplify complex interactions by defining
+a series of steps that the Docs Agent CLI will execute. The tasks are defined in `.yaml`
+files stored in the [`tasks`][tasks-dir] directory of your Docs Agent project. The tasks are
+designed to be reusable and can be used to automate common workflows, such as generating
+release notes, drafting overview pages, or analyzing complex information.
+
+A task file example:
+
+```yaml
+tasks:
+  - name: "ExtractWorkflows"
+    model: "models/gemini-1.5-flash-latest"
+    description: "An agent that extracts workflows from a source doc."
+    steps:
+      - prompt: "Summarize the contents of this document in a concise and informative manner. Focus on the key procedures, steps, or workflows described."
+        flags:
+          file: "<INPUT>"
+          default_input: "./README.md"
+      - prompt: "Identify and list all key workflows described in the document. Provide a brief description for each workflow, highlighting its purpose and key steps."
+      - prompt: "Identify all command lines used in the workflows described in the document. Focus on command lines that are essential for executing the workflow steps."
+      - prompt: "For each identified command line, provide a detailed description of its function and purpose. Include specific examples of its usage, showcasing how it is integrated within the workflows."
+```
+
+To set up and run the `agent runtask` command, see [Set up Docs Agent CLI][cli-readme].
+
+For creating a new task, see [Create a new Docs Agent task][create-a-new-task].
+
+## Summary of features
+
+The list below summarizes the tasks and features supported by Docs Agent:
 
 - **Process Markdown**: Split Markdown files into small plain text chunks. (See
   [Docs Agent chunking process][chunking-process].)
@@ -34,8 +94,6 @@ The following list summarizes the tasks and features supported by Docs Agent:
   chunks that are most relevant to user questions.
 - **Add context to a user question**: Add chunks returned from a semantic search as
   [context][prompt-structure] to a prompt.
-- **Fact-check responses**: This [experimental feature][fact-check-section] composes
-  a follow-up prompt and asks the language model to “fact-check” its own previous response.
 - **Generate related questions**: In addition to answering a question, Docs Agent can
   [suggest related questions][related-questions-section] based on the context of the
   question.
@@ -60,9 +118,9 @@ The following list summarizes the tasks and features supported by Docs Agent:
   [Set up the Docs Agent CLI][cli-readme] to make requests to the Gemini models
   from anywhere in a terminal.
 - **Support the Gemini 1.5 models**: Docs Agent works with the Gemini 1.5 models,
-  `gemini-1.5-pro-latest` and `text-embedding-004`. The new ["1.5"][new-15-mode] web app
-  mode uses all three Gemini models to their strength: AQA (`aqa`), Gemini 1.0 Pro
-  (`gemini-pro`), and Gemini 1.5 Pro (`gemini-1.5-pro-latest`).
+  `gemini-1.5-pro`, `gemini-1.5-flash`, and `text-embedding-004`. The new
+  [`full`][new-15-mode] web app mode uses all three Gemini models to their strength:
+  AQA (`aqa`), Gemini 1.0 Pro (`gemini-pro`), and Gemini 1.5 Pro (`gemini-1.5-pro`).
 - **Complete a task using the Docs Agent CLI**: The `agent runtask` command allows you
   to run pre-defined chains of prompts, which are referred to as tasks. These tasks
   simplify complex interactions by defining a series of steps that the Docs Agent will
@@ -72,6 +130,23 @@ The following list summarizes the tasks and features supported by Docs Agent:
   ```sh
   agent runtask --task DraftReleaseNotes
   ```
+
+- **Multi-modal support**: Docs Agent's `agent helpme` command can include image,
+  audio, and video files as part of a prompt to the Gemini 1.5 model, for example:
+
+  ```sh
+  agent helpme Provide a concise, descriptive alt text for this PNG image --file ./my_image_example.png
+  ```
+
+  You can use this feature for creating tasks as well. For example, see the
+  [DescribeImages][describe-images] task.
+
+- **Interact with LLM using external tools**: The `agent tools` command allows
+  you to interact with the Gemini model using configured external tools
+  (through MCP - Model Context Protocol). This enables the agent to perform
+  actions by leveraging specialized tools. (See
+  [Docs Agent CLI reference][cli-reference] and
+  [Docs Agent concepts][docs-agent-concepts]).
 
 For more information on Docs Agent's architecture and features,
 see the [Docs Agent concepts][docs-agent-concepts] page.
@@ -102,7 +177,7 @@ Setting up Docs Agent requires the following prerequisite items:
   - (**Optional**) [Authenticated OAuth client credentials][oauth-client]
     stored on the host machine
 
-### 2 Update your host machine's environment
+### 2. Update your host machine's environment
 
 Update your host machine's environment to prepare for the Docs Agent setup:
 
@@ -204,7 +279,19 @@ Clone the Docs Agent project and install dependencies:
    poetry install
    ```
 
-4. Enter the `poetry` shell environment:
+4. Set up the Poetry environment:
+
+   ```
+   poetry env activate
+   ```
+
+5. Install the `shell` plugin:
+
+   ```
+   poetry self add poetry-plugin-shell
+   ```
+
+6. Enter the `poetry` shell environment:
 
    ```
    poetry shell
@@ -212,6 +299,13 @@ Clone the Docs Agent project and install dependencies:
 
    **Important**: From this point, all `agent` command lines below need to
    run in this `poetry shell` environment.
+
+7. (**Optional**) To enable autocomplete commands and flags related to
+   Docs Agent in your shell environment, run the following command:
+
+   ```
+   source scripts/autocomplete.sh
+   ```
 
 ### 5. Edit the Docs Agent configuration file
 
@@ -403,7 +497,6 @@ Meggin Kearney (`@Meggin`), and Kyo Lee (`@kyolee415`).
 [set-up-docs-agent]: #set-up-docs-agent
 [preprocess-dir]: ./docs_agent/preprocess/
 [populate-vector-database]: ./docs_agent/preprocess/populate_vector_database.py
-[fact-check-section]: ./docs/concepts.md#using-a-language-model-to-fact_check-its-own-response
 [related-questions-section]: ./docs/concepts.md#using-a-language-model-to-suggest-related-questions
 [submit-a-rewrite]: ./docs/concepts.md#enabling-users-to-submit-a-rewrite-of-a-generated-response
 [like-generated-responses]: ./docs/concepts.md#enabling-users-to-like-generated-responses
@@ -430,3 +523,6 @@ Meggin Kearney (`@Meggin`), and Kyo Lee (`@kyolee415`).
 [chunking-process]: docs/chunking-process.md
 [new-15-mode]: docs/config-reference.md#app_mode
 [tasks-dir]: tasks/
+[describe-images]: tasks/describe-images-for-alt-text-task.yaml
+[create-a-new-task]: docs/create-a-new-task.md
+[git-mcp-server]: https://github.com/modelcontextprotocol/servers/tree/main/src/git

@@ -119,7 +119,7 @@ Content hash: {self.md_hash}\n"
 
 
 def DictionarytoSection(metadata: dict) -> Section:
-    if "section_id" in metadata:
+    if "section_id" in metadata and metadata["section_id"] != '':
         section_id = int(metadata["section_id"])
     else:
         section_id = ""
@@ -135,11 +135,11 @@ def DictionarytoSection(metadata: dict) -> Section:
         page_title = str(metadata["page_title"])
     else:
         page_title = ""
-    if "section_level" in metadata:
+    if "section_level" in metadata and metadata["section_level"] != '':
         section_level = int(metadata["section_level"])
     else:
         section_level = ""
-    if "previous_id" in metadata:
+    if "previous_id" in metadata and metadata["previous_id"] != '':
         previous_id = int(metadata["previous_id"])
     else:
         previous_id = ""
@@ -147,7 +147,7 @@ def DictionarytoSection(metadata: dict) -> Section:
         parent_tree = metadata["parent_tree"]
     else:
         parent_tree = []
-    if "token_estimate" in metadata:
+    if "token_estimate" in metadata and metadata["token_estimate"] != '':
         token_estimate = int(metadata["token_estimate"])
     else:
         token_estimate = ""
@@ -220,7 +220,7 @@ def markdown_to_text(markdown_string):
     html = markdown.markdown(markdown_string)
     # Extract text
     soup = bs4.BeautifulSoup(html, "html.parser")
-    text = "".join(soup.findAll(string=True))
+    text = "".join(soup.find_all(string=True))
     # Remove [][] in Markdown
     text = re.sub(r"\[(.*?)\]\[(.*?)\]", "\\1", text)
     # Remove {: } in Markdown
@@ -362,13 +362,13 @@ def build_parent_tree(
 def clean_section_id(section_id: str) -> str:
     section_id = re.sub("'", "", section_id)
     section_id = re.sub("`", "", section_id)
-    section_id = re.sub("\.", "", section_id)
-    section_id = re.sub("\,", "", section_id)
+    section_id = re.sub(r"\.", "", section_id)
+    section_id = re.sub(",", "", section_id)
     section_id = re.sub("#", "", section_id)
-    section_id = re.sub("\?", "", section_id)
-    section_id = re.sub("\/", "", section_id)
-    section_id = re.sub("\{", "", section_id)
-    section_id = re.sub("\}", "", section_id)
+    section_id = re.sub(r"\?", "", section_id)
+    section_id = re.sub(r"\/", "", section_id)
+    section_id = re.sub(r"\{", "", section_id)
+    section_id = re.sub(r"\}", "", section_id)
     section_id = re.sub(":", "", section_id)
     return section_id
 
@@ -629,7 +629,7 @@ def process_document_into_sections(markdown_text):
     return sections
 
 
-# Process an array of Markdwon text into an array of string buffers
+# Process an array of Markdown text into an array of string buffers
 # whose size is smaller than 5KB.
 def construct_chunks(lines):
     contents = []

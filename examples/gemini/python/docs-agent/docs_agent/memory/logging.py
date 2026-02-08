@@ -33,7 +33,7 @@ def log_question_to_file(user_question: str, response: str, probability: str = "
         .replace("'", "")
         .replace("`", "")
     )
-    filename = re.sub("[^a-zA-Z0-9\-]", "", filename)
+    filename = re.sub("[^a-zA-Z0-9\\-]", "", filename)
     if len(filename) > 64:
         filename = filename[:64]
     log_dir = "./logs/responses"
@@ -84,7 +84,7 @@ def log_debug_info_to_file(
         .replace("'", "")
         .replace("`", "")
     )
-    question_formatted = re.sub("[^a-zA-Z0-9\-]", "", question_formatted)
+    question_formatted = re.sub("[^a-zA-Z0-9\\-]", "", question_formatted)
     if len(question_formatted) > 32:
         question_formatted = question_formatted[:32]
     filename = date_formatted + "-" + question_formatted + "-" + str(uid) + ".txt"
@@ -315,5 +315,5 @@ def log_dislike(is_dislike, uid, save: bool = True):
             log_file.write(
                 "[" + date.strftime(date_format) + "][UID " + str(uid) + "]\n"
             )
-            log_file.write("Disike: " + str(is_dislike) + "\n\n")
+            log_file.write("Dislike: " + str(is_dislike) + "\n\n")
             log_file.close()
